@@ -24,3 +24,4 @@ disk0
 .projectile
 .DS_Store
 cmake-build-debug
+CMakeLists.txt
