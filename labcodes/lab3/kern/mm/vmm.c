@@ -7,6 +7,7 @@
 #include <pmm.h>
 #include <x86.h>
 #include <swap.h>
+//#include <curses.h>
 
 /* 
   vmm design include two parts: mm_struct (mm) & vma_struct (vma)
@@ -396,7 +397,42 @@ do_pgfault(struct mm_struct *mm, uint32_t error_code, uintptr_t addr) {
         }
    }
 #endif
-   ret = 0;
+    /*LAB3 EXERCISE 1: 2016011348*/
+    ptep = get_pte(boot_pgdir, addr, 1); //(1) try to find a pte, if pte's PT(Page Table) isn't existed, then create a PT.
+    if (*ptep == 0) {
+        //(2) if the phy addr isn't exist, then alloc a page & map the phy addr with logical addr
+        pgdir_alloc_page(mm->pgdir, addr, perm);
+    }
+    else {
+        /*LAB3 EXERCISE 2: 2016011348
+        * Now we think this pte is a  swap entry, we should load data from disk to a page with phy addr,
+        * and map the phy addr with logical addr, trigger swap manager to record the access situation of this page.
+        *
+        *  Some Useful MACROs and DEFINEs, you can use them in below implementation.
+        *  MACROs or Functions:
+        *    swap_in(mm, addr, &page) : alloc a memory page, then according to the swap entry in PTE for addr,
+        *                               find the addr of disk page, read the content of disk page into this memroy page
+        *    page_insert ： build the map of phy addr of an Page with the linear addr la
+        *    swap_map_swappable ： set the page swappable
+        */
+        if(swap_init_ok) {
+            struct Page *page=NULL;
+            //(1）According to the mm AND addr, try to load the content of right disk page
+            //    into the memory which page managed.
+            swap_in(mm, addr, &page);
+            //(2) According to the mm, addr AND page, setup the map of phy addr <---> logical addr
+            page_insert(mm->pgdir, page, addr, perm);
+            page->pra_vaddr = addr;
+            //(3) make the page swappable.
+            swap_map_swappable(mm, addr, page, 1);
+        }
+        else {
+            cprintf("no swap_init_ok but ptep is %x, failed\n",*ptep);
+            goto failed;
+        }
+    }
+
+    ret = 0;
 failed:
     return ret;
 }
