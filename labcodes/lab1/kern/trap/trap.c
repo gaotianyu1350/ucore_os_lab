@@ -52,8 +52,9 @@ idt_init(void) {
     // (2)
     int i;
     for (i = 0; i < sizeof(idt) / sizeof(struct gatedesc); i++)
-        SETGATE(idt[i], 0, GD_KTEXT, __vectors[i], DPL_KERNEL);
-    SETGATE(idt[T_SWITCH_TOK], 0, GD_KTEXT, __vectors[T_SWITCH_TOK], DPL_USER);
+        SETGATE(idt[i], 0, KERNEL_CS, __vectors[i], DPL_KERNEL);
+    SETGATE(idt[T_SYSCALL], 1, KERNEL_CS, __vectors[T_SYSCALL], DPL_USER);
+    SETGATE(idt[T_SWITCH_TOK], 1, KERNEL_CS, __vectors[T_SWITCH_TOK], DPL_USER);
     // (3)
     lidt(&idt_pd);
 }
@@ -170,11 +171,41 @@ trap_dispatch(struct trapframe *tf) {
     case IRQ_OFFSET + IRQ_KBD:
         c = cons_getc();
         cprintf("kbd [%03d] %c\n", c, c);
+        if (c == '0')
+        {
+            cprintf('T_SWITCH_TOK\n');
+            if (tf->tf_cs != KERNEL_CS) 
+            {
+                tf->tf_cs = KERNEL_CS;
+                tf->tf_ds = tf->tf_es = tf->tf_ss = KERNEL_DS;
+            }
+        }
+        if (c == '3')
+        {
+            cprintf('T_SWITCH_TOU\n');
+            if (tf->tf_cs != USER_CS) 
+            {
+                tf->tf_cs = USER_CS;
+                tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
+                tf->tf_eflags |= FL_IOPL_MASK;
+            }
+        }
         break;
     //LAB1 CHALLENGE 1 : YOUR CODE you should modify below codes.
     case T_SWITCH_TOU:
+        if (tf->tf_cs != USER_CS) 
+        {
+            tf->tf_cs = USER_CS;
+            tf->tf_ds = tf->tf_es = tf->tf_ss = USER_DS;
+            tf->tf_eflags |= FL_IOPL_MASK;
+        }
+        break;
     case T_SWITCH_TOK:
-        panic("T_SWITCH_** ??\n");
+        if (tf->tf_cs != KERNEL_CS) 
+        {
+            tf->tf_cs = KERNEL_CS;
+            tf->tf_ds = tf->tf_es = tf->tf_ss = KERNEL_DS;
+        }
         break;
     case IRQ_OFFSET + IRQ_IDE1:
     case IRQ_OFFSET + IRQ_IDE2:

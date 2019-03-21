@@ -117,6 +117,8 @@ alloc_proc(void) {
     proc->cr3 = boot_cr3;
     proc->flags = 0;
     proc->name[0] = '\0';
+    proc->wait_state = 0;
+    proc->yptr = proc->optr = proc->cptr = 0;
 
     return proc;
 }
@@ -160,7 +162,7 @@ remove_links(struct proc_struct *proc) {
         proc->yptr->optr = proc->optr;
     }
     else {
-       proc->parent->cptr = proc->optr;
+        proc->parent->cptr = proc->optr;
     }
     nr_process --;
 }
@@ -177,9 +179,9 @@ get_pid(void) {
         goto inside;
     }
     if (last_pid >= next_safe) {
-    inside:
+        inside:
         next_safe = MAX_PID;
-    repeat:
+        repeat:
         le = list;
         while ((le = list_next(le)) != list) {
             proc = le2proc(le, list_link);
@@ -338,17 +340,17 @@ copy_mm(uint32_t clone_flags, struct proc_struct *proc) {
         goto bad_dup_cleanup_mmap;
     }
 
-good_mm:
+    good_mm:
     mm_count_inc(mm);
     proc->mm = mm;
     proc->cr3 = PADDR(mm->pgdir);
     return 0;
-bad_dup_cleanup_mmap:
+    bad_dup_cleanup_mmap:
     exit_mmap(mm);
     put_pgdir(mm);
-bad_pgdir_cleanup_mm:
+    bad_pgdir_cleanup_mm:
     mm_destroy(mm);
-bad_mm:
+    bad_mm:
     return ret;
 }
 
@@ -415,8 +417,9 @@ do_fork(uint32_t clone_flags, uintptr_t stack, struct trapframe *tf) {
     local_intr_save(intr_flag);
     proc->pid = get_pid();
     hash_proc(proc);
-    list_add(&proc_list, &(proc->list_link));
-    nr_process++;
+    // list_add(&proc_list, &(proc->list_link));
+    // nr_process++;
+    set_links(proc);
     local_intr_restore(intr_flag);
 
     wakeup_proc(proc);
@@ -445,7 +448,7 @@ do_exit(int error_code) {
     if (current == initproc) {
         panic("initproc exit.\n");
     }
-    
+
     struct mm_struct *mm = current->mm;
     if (mm != NULL) {
         lcr3(boot_cr3);
@@ -458,7 +461,7 @@ do_exit(int error_code) {
     }
     current->state = PROC_ZOMBIE;
     current->exit_code = error_code;
-    
+
     bool intr_flag;
     struct proc_struct *proc;
     local_intr_save(intr_flag);
@@ -470,7 +473,7 @@ do_exit(int error_code) {
         while (current->cptr != NULL) {
             proc = current->cptr;
             current->cptr = proc->optr;
-    
+
             proc->yptr = NULL;
             if ((proc->optr = initproc->cptr) != NULL) {
                 initproc->cptr->yptr = proc;
@@ -485,7 +488,7 @@ do_exit(int error_code) {
         }
     }
     local_intr_restore(intr_flag);
-    
+
     schedule();
     panic("do_exit will not return!! %d.\n", current->pid);
 }
@@ -525,7 +528,7 @@ load_icode(unsigned char *binary, size_t size) {
     uint32_t vm_flags, perm;
     struct proghdr *ph_end = ph + elf->e_phnum;
     for (; ph < ph_end; ph ++) {
-    //(3.4) find every program section headers
+        //(3.4) find every program section headers
         if (ph->p_type != ELF_PT_LOAD) {
             continue ;
         }
@@ -536,7 +539,7 @@ load_icode(unsigned char *binary, size_t size) {
         if (ph->p_filesz == 0) {
             continue ;
         }
-    //(3.5) call mm_map fun to setup the new vma ( ph->p_va, ph->p_memsz)
+        //(3.5) call mm_map fun to setup the new vma ( ph->p_va, ph->p_memsz)
         vm_flags = 0, perm = PTE_U;
         if (ph->p_flags & ELF_PF_X) vm_flags |= VM_EXEC;
         if (ph->p_flags & ELF_PF_W) vm_flags |= VM_WRITE;
@@ -551,9 +554,9 @@ load_icode(unsigned char *binary, size_t size) {
 
         ret = -E_NO_MEM;
 
-     //(3.6) alloc memory, and  copy the contents of every program section (from, from+end) to process's memory (la, la+end)
+        //(3.6) alloc memory, and  copy the contents of every program section (from, from+end) to process's memory (la, la+end)
         end = ph->p_va + ph->p_filesz;
-     //(3.6.1) copy TEXT/DATA section of bianry program
+        //(3.6.1) copy TEXT/DATA section of bianry program
         while (start < end) {
             if ((page = pgdir_alloc_page(mm->pgdir, la, perm)) == NULL) {
                 goto bad_cleanup_mmap;
@@ -566,7 +569,7 @@ load_icode(unsigned char *binary, size_t size) {
             start += size, from += size;
         }
 
-      //(3.6.2) build BSS section of binary program
+        //(3.6.2) build BSS section of binary program
         end = ph->p_va + ph->p_memsz;
         if (start < la) {
             /* ph->p_memsz == ph->p_filesz */
@@ -602,7 +605,7 @@ load_icode(unsigned char *binary, size_t size) {
     assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-2*PGSIZE , PTE_USER) != NULL);
     assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-3*PGSIZE , PTE_USER) != NULL);
     assert(pgdir_alloc_page(mm->pgdir, USTACKTOP-4*PGSIZE , PTE_USER) != NULL);
-    
+
     //(5) set current process's mm, sr3, and set CR3 reg = physical addr of Page Directory
     mm_count_inc(mm);
     current->mm = mm;
@@ -627,15 +630,15 @@ load_icode(unsigned char *binary, size_t size) {
     tf->tf_eip = elf->e_entry;
     tf->tf_eflags = FL_IF;
     ret = 0;
-out:
+    out:
     return ret;
-bad_cleanup_mmap:
+    bad_cleanup_mmap:
     exit_mmap(mm);
-bad_elf_cleanup_pgdir:
+    bad_elf_cleanup_pgdir:
     put_pgdir(mm);
-bad_pgdir_cleanup_mm:
+    bad_pgdir_cleanup_mm:
     mm_destroy(mm);
-bad_mm:
+    bad_mm:
     goto out;
 }
 
@@ -671,7 +674,7 @@ do_execve(const char *name, size_t len, unsigned char *binary, size_t size) {
     set_proc_name(current, local_name);
     return 0;
 
-execve_exit:
+    execve_exit:
     do_exit(ret);
     panic("already exit: %e.\n", ret);
 }
@@ -697,7 +700,7 @@ do_wait(int pid, int *code_store) {
 
     struct proc_struct *proc;
     bool intr_flag, haskid;
-repeat:
+    repeat:
     haskid = 0;
     if (pid != 0) {
         proc = find_proc(pid);
@@ -728,7 +731,7 @@ repeat:
     }
     return -E_BAD_PROC;
 
-found:
+    found:
     if (proc == idleproc || proc == initproc) {
         panic("wait idleproc or initproc.\n");
     }
@@ -768,10 +771,10 @@ static int
 kernel_execve(const char *name, unsigned char *binary, size_t size) {
     int ret, len = strlen(name);
     asm volatile (
-        "int %1;"
-        : "=a" (ret)
-        : "i" (T_SYSCALL), "0" (SYS_exec), "d" (name), "c" (len), "b" (binary), "D" (size)
-        : "memory");
+    "int %1;"
+    : "=a" (ret)
+    : "i" (T_SYSCALL), "0" (SYS_exec), "d" (name), "c" (len), "b" (binary), "D" (size)
+    : "memory");
     return ret;
 }
 
@@ -831,7 +834,7 @@ init_main(void *arg) {
     return 0;
 }
 
-// proc_init - set up the first kernel thread idleproc "idle" by itself and 
+// proc_init - set up the first kernel thread idleproc "idle" by itself and
 //           - create the second kernel thread init_main
 void
 proc_init(void) {
@@ -876,4 +879,3 @@ cpu_idle(void) {
         }
     }
 }
-

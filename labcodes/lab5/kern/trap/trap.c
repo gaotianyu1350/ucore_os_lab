@@ -22,7 +22,7 @@ static void print_ticks() {
     cprintf("%d ticks\n",TICK_NUM);
 #ifdef DEBUG_GRADE
     cprintf("End of Test.\n");
-    panic("EOT: kernel seems ok.");
+    outb(0x501, 0);
 #endif
 }
 
@@ -58,8 +58,10 @@ idt_init(void) {
     // (2)
     int i;
     for (i = 0; i < sizeof(idt) / sizeof(struct gatedesc); i++)
-    SETGATE(idt[i], 0, GD_KTEXT, __vectors[i], DPL_KERNEL);
-    SETGATE(idt[T_SWITCH_TOK], 0, GD_KTEXT, __vectors[T_SWITCH_TOK], DPL_USER);
+        SETGATE(idt[i], 0, KERNEL_CS, __vectors[i], DPL_KERNEL);
+    SETGATE(idt[T_SYSCALL], 1, KERNEL_CS, __vectors[T_SYSCALL], DPL_USER);
+    SETGATE(idt[T_SWITCH_TOK], 1, KERNEL_CS, __vectors[T_SWITCH_TOK], DPL_USER);
+
     // (3)
     lidt(&idt_pd);
 }
@@ -227,9 +229,10 @@ trap_dispatch(struct trapframe *tf) {
          * (3) Too Simple? Yes, I think so!
          */
         ticks++;
-        if (ticks % TICK_NUM == 0)
+        if (ticks % TICK_NUM == 0) {
             print_ticks();
-
+            current->need_resched = 1;
+        }
         break;
 
     case IRQ_OFFSET + IRQ_COM1:

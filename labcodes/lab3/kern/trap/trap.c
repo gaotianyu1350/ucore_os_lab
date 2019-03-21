@@ -53,7 +53,7 @@ idt_init(void) {
     // (2)
     int i;
     for (i = 0; i < sizeof(idt) / sizeof(struct gatedesc); i++)
-    SETGATE(idt[i], 0, GD_KTEXT, __vectors[i], DPL_KERNEL);
+        SETGATE(idt[i], 0, GD_KTEXT, __vectors[i], DPL_KERNEL);
     SETGATE(idt[T_SWITCH_TOK], 0, GD_KTEXT, __vectors[T_SWITCH_TOK], DPL_USER);
     // (3)
     lidt(&idt_pd);
