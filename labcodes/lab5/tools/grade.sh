@@ -355,6 +355,119 @@ default_check() {
 
 ## check now!!
 
+run_test -prog 'badsegment' -check default_check                \
+        'kernel_execve: pid = 2, name = "badsegment".'          \
+      - 'trapframe at 0xc.......'                               \
+        'trap 0x0000000d General Protection'                    \
+        '  err  0x00000028'                                     \
+      - '  eip  0x008.....'                                     \
+      - '  esp  0xaff.....'                                     \
+        '  cs   0x----001b'                                     \
+        '  ss   0x----0023'                                     \
+    ! - 'user panic at .*'
+
+run_test -prog 'divzero' -check default_check                   \
+        'kernel_execve: pid = 2, name = "divzero".'             \
+      - 'trapframe at 0xc.......'                               \
+        'trap 0x00000000 Divide error'                          \
+      - '  eip  0x008.....'                                     \
+      - '  esp  0xaff.....'                                     \
+        '  cs   0x----001b'                                     \
+        '  ss   0x----0023'                                     \
+    ! - 'user panic at .*'
+
+run_test -prog 'softint' -check default_check                   \
+        'kernel_execve: pid = 2, name = "softint".'             \
+      - 'trapframe at 0xc.......'                               \
+        'trap 0x0000000d General Protection'                    \
+        '  err  0x00000072'                                     \
+      - '  eip  0x008.....'                                     \
+      - '  esp  0xaff.....'                                     \
+        '  cs   0x----001b'                                     \
+        '  ss   0x----0023'                                     \
+    ! - 'user panic at .*'
+
+pts=10
+
+run_test -prog 'faultread'  -check default_check                                     \
+        'kernel_execve: pid = 2, name = "faultread".'           \
+      - 'trapframe at 0xc.......'                               \
+        'trap 0x0000000e Page Fault'                            \
+        '  err  0x00000004'                                     \
+      - '  eip  0x008.....'                                     \
+    ! - 'user panic at .*'
+
+run_test -prog 'faultreadkernel' -check default_check                                \
+        'kernel_execve: pid = 2, name = "faultreadkernel".'     \
+      - 'trapframe at 0xc.......'                               \
+        'trap 0x0000000e Page Fault'                            \
+        '  err  0x00000005'                                     \
+      - '  eip  0x008.....'                                     \
+    ! - 'user panic at .*'
+
+run_test -prog 'hello' -check default_check                                          \
+        'kernel_execve: pid = 2, name = "hello".'               \
+        'Hello world!!.'                                        \
+        'I am process 2.'                                       \
+        'hello pass.'
+
+run_test -prog 'testbss' -check default_check                                        \
+        'kernel_execve: pid = 2, name = "testbss".'             \
+        'Making sure bss works right...'                        \
+        'Yes, good.  Now doing a wild write off the end...'     \
+        'testbss may pass.'                                     \
+      - 'trapframe at 0xc.......'                               \
+        'trap 0x0000000e Page Fault'                            \
+        '  err  0x00000006'                                     \
+      - '  eip  0x008.....'                                     \
+        'killed by kernel.'                                     \
+    ! - 'user panic at .*'
+
+run_test -prog 'pgdir' -check default_check                                          \
+        'kernel_execve: pid = 2, name = "pgdir".'               \
+        'I am 2, print pgdir.'                                  \
+        'PDE(001) 00800000-00c00000 00400000 urw'               \
+        '  |-- PTE(00002) 00800000-00802000 00002000 ur-'       \
+        '  |-- PTE(00001) 00802000-00803000 00001000 urw'       \
+        'PDE(001) afc00000-b0000000 00400000 urw'               \
+        '  |-- PTE(00004) afffc000-b0000000 00004000 urw'       \
+        'PDE(0e0) c0000000-f8000000 38000000 urw'               \
+        '  |-- PTE(38000) c0000000-f8000000 38000000 -rw'       \
+        'pgdir pass.'
+
+run_test -prog 'yield' -check default_check                                          \
+        'kernel_execve: pid = 2, name = "yield".'               \
+        'Hello, I am process 2.'                                \
+        'Back in process 2, iteration 0.'                       \
+        'Back in process 2, iteration 1.'                       \
+        'Back in process 2, iteration 2.'                       \
+        'Back in process 2, iteration 3.'                       \
+        'Back in process 2, iteration 4.'                       \
+        'All done in process 2.'                                \
+        'yield pass.'
+
+
+run_test -prog 'badarg' -check default_check                    \
+        'kernel_execve: pid = 2, name = "badarg".'              \
+        'fork ok.'                                              \
+        'badarg pass.'                                          \
+        'all user-mode processes have quit.'                    \
+        'init check memory pass.'                               \
+    ! - 'user panic at .*'
+
+pts=10
+
+run_test -prog 'exit'  -check default_check                                          \
+        'kernel_execve: pid = 2, name = "exit".'                \
+        'I am the parent. Forking the child...'                 \
+        'I am the parent, waiting now..'                        \
+        'I am the child.'                                       \
+      - 'waitpid [0-9]+ ok\.'                                   \
+        'exit pass.'                                            \
+        'all user-mode processes have quit.'                    \
+        'init check memory pass.'                               \
+    ! - 'user panic at .*'
+
 run_test -prog 'spin'  -check default_check                                          \
         'kernel_execve: pid = 2, name = "spin".'                \
         'I am the parent. Forking the child...'                 \

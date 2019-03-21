@@ -22,7 +22,7 @@ static void print_ticks() {
     cprintf("%d ticks\n",TICK_NUM);
 #ifdef DEBUG_GRADE
     cprintf("End of Test.\n");
-    outb(0x501, 0);
+    panic("EOT: kernel seems ok.");
 #endif
 }
 
@@ -230,7 +230,7 @@ trap_dispatch(struct trapframe *tf) {
          */
         ticks++;
         if (ticks % TICK_NUM == 0) {
-            print_ticks();
+            // print_ticks();
             current->need_resched = 1;
         }
         break;
