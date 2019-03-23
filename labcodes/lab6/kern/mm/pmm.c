@@ -342,7 +342,7 @@ pmm_init(void) {
 // return vaule: the kernel virtual address of this pte
 pte_t *
 get_pte(pde_t *pgdir, uintptr_t la, bool create) {
-    /* LAB2 EXERCISE 2: YOUR CODE
+    /* LAB2 EXERCISE 2: 2016011348
      *
      * If you need to visit a physical address, please use KADDR()
      * please read pmm.h for useful macros
@@ -375,6 +375,33 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create) {
     }
     return NULL;          // (8) return page table entry
 #endif
+    // (1) find page directory entry
+    pde_t *pdep = pgdir + PDX(la);
+    // (2) check if entry is not present
+    if (!(*pdep & PTE_P)) {
+        // (3) check if creating is needed, then alloc page for page table
+        // CAUTION: this page is used for page table, not for common data page
+        if (!create)
+            return NULL;
+        struct Page *page = alloc_page();
+        if (!page)
+            return NULL;
+
+        // (4) set page reference
+        set_page_ref(page, 1);
+
+        // (5) get linear address of page
+        uintptr_t pa = page2pa(page);
+
+        // (6) clear page content using memset
+        memset(KADDR(pa), 0, PGSIZE);
+
+        // (7) set page directory entry's permission
+        *pdep = pa | PTE_U | PTE_W | PTE_P;
+    }
+
+    // (8) return page table entry
+    return (pte_t*)KADDR(PDE_ADDR(*pdep)) + PTX(la);
 }
 
 //get_page - get related Page struct for linear address la using PDT pgdir
@@ -395,7 +422,7 @@ get_page(pde_t *pgdir, uintptr_t la, pte_t **ptep_store) {
 //note: PT is changed, so the TLB need to be invalidate 
 static inline void
 page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep) {
-    /* LAB2 EXERCISE 3: YOUR CODE
+    /* LAB2 EXERCISE 3: 2016011348
      *
      * Please check if ptep is valid, and tlb must be manually updated if mapping is updated
      *
@@ -420,7 +447,23 @@ page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep) {
                                   //(6) flush tlb
     }
 #endif
+    //(1) check if this page table entry is present
+    if (*ptep & PTE_P) {
+        //(2) find corresponding page to pte
+        struct Page *p = pte2page(*ptep);
+        //(3) decrease page reference
+        page_ref_dec(p);
+        //(4) and free this page when page reference reachs 0
+        if (p->ref == 0) {
+            free_pages(p, 1);
+        }
+        //(5) clear second page table entry
+        *ptep = 0;
+        //(6) flush tlb
+        tlb_invalidate(pgdir, la);
+    }
 }
+
 
 void
 unmap_range(pde_t *pgdir, uintptr_t start, uintptr_t end) {
@@ -487,7 +530,7 @@ copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end, bool share) {
         assert(page!=NULL);
         assert(npage!=NULL);
         int ret=0;
-        /* LAB5:EXERCISE2 YOUR CODE
+        /* LAB5:EXERCISE2 2016011348
          * replicate content of page to npage, build the map of phy addr of nage with the linear addr start
          *
          * Some Useful MACROs and DEFINEs, you can use them in below implementation.
@@ -501,6 +544,12 @@ copy_range(pde_t *to, pde_t *from, uintptr_t start, uintptr_t end, bool share) {
          * (3) memory copy from src_kvaddr to dst_kvaddr, size is PGSIZE
          * (4) build the map of phy addr of  nage with the linear addr start
          */
+
+        uint32_t kvaddr_src = page2kva(page);
+        uint32_t kvaddr_dst = page2kva(npage);
+        memcpy(kvaddr_dst, kvaddr_src, PGSIZE);
+        ret = page_insert(to, npage, start, perm);
+
         assert(ret == 0);
         }
         start += PGSIZE;
