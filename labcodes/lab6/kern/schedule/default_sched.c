@@ -142,7 +142,7 @@ stride_pick_next(struct run_queue *rq) {
  */
 static void
 stride_proc_tick(struct run_queue *rq, struct proc_struct *proc) {
-     /* LAB6: YOUR CODE */
+     /* LAB6: 2016011348 */
      if (proc->time_slice > 0)
         proc->time_slice--;
      if (proc->time_slice <= 0)
